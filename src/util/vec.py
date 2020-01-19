@@ -1,4 +1,5 @@
 import math
+from rlutilities.linear_algebra import vec3
 
 
 # This is a helper class for vector math. You can extend it or delete if you want.
@@ -102,7 +103,7 @@ class Vec3:
     def project(self, other: 'Vec3') -> 'Vec3':
         return other.rescale(other.normalized().dot(self))
         
-    def orthogonalise(self, other: 'Vec3') -> 'Vec3':
+    def orthogonalize(self, other: 'Vec3') -> 'Vec3':
         return self - self.project(other)
 
     def rotate_2D(self, angle: float) -> 'Vec3':
@@ -112,3 +113,7 @@ class Vec3:
             self.x * math.sin(angle) + self.y * math.cos(angle),
             self.z
         )
+
+
+    def toRLU(self) -> vec3:
+        return vec3(self.x, self.y, self.z)

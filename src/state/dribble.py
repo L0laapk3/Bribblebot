@@ -6,13 +6,38 @@ from util.vec import Vec3
 import util.const
 
 from state.state import State
+from state.yeet import Yeet
+from state.frontflip import Frontflip
 import math
+
+from rlutilities.linear_algebra import vec3, axis_to_rotation, dot, norm, normalize
+from rlutilities.mechanics import Drive as RLUDrive
 
 
 normalSpeed = 1409
 boostSpeed = 2299
 
-#for zombie tournament
+###################################################################################
+#                                                                                 #
+# WARNING!!                                                                       #
+#                                                                                 #
+# THIS BOT WAS JUST MENT TO BE A PID BALL BALANCING BOT TEST.                     #
+# IT WAS NEVER MENT TO BECOME ANYTHING WHATSOEVER OR PARTICIPATE IN COMPETITIONS. #
+# THIS CODE IS THEREFORE EXTREMELY MESSY AND I DONT INTEND ON MAINTAINING IT.     #
+#                                                                                 #
+# SERIOUSLY, THE AMOUNT OF TECHNICAL DEBT IS ASTONISHING FOR SUCH A SMALL FILE.   #
+#                                                                                 #
+# IF YOU INTEND ON PLAYING WITH THIS CODE, GOOD LUCK.                             #
+#                                                                                 #
+###################################################################################
+
+
+
+# TODO for competitions:
+# TODO get boost when ball is high in the air
+# TODO better flick
+# TODO no flick when OT
+
 
 class Dribble(State):
     def __init__(self, agent: BaseAgent):
@@ -20,11 +45,20 @@ class Dribble(State):
         self.balanceTime = 0
         self.carToTargetIntegral = Vec3()
         self.steerBiasLimit = 0.5
+        self.lastVelocities = [vec3(0, 0, 0)] * 32
 
 
     def tick(self, packet: GameTickPacket) -> bool:
+        #self.agent.renderer.begin_rendering()
 
         kickoff = packet.game_info.is_round_active and packet.game_info.is_kickoff_pause
+
+        carAccelerations = []
+        for i in range(packet.num_cars):
+            car = packet.game_cars[i]
+            velocity = vec3(car.physics.velocity.x, car.physics.velocity.y, car.physics.velocity.z)
+            carAccelerations.append((velocity - self.lastVelocities[i]) / self.agent.ticksThisPacket * 120)
+            self.lastVelocities[i] = velocity
 
 
         # car info
@@ -34,7 +68,7 @@ class Dribble(State):
         carSpeed = carVelocity.length()
 
         # ball info
-        ballLocation = Vec3(packet.game_ball.physics.location)
+        realBallLocation = ballLocation = Vec3(packet.game_ball.physics.location)
         ballVelocity = Vec3(packet.game_ball.physics.velocity)
         if ballLocation.z < 100:
             self.balanceTime = 0
@@ -51,7 +85,8 @@ class Dribble(State):
         
         teamDirection = 1 if packet.game_cars[self.agent.index].team == 0 else -1
         sidewaysDiff = abs(carLocation.x)-893+100
-        if sidewaysDiff > 0:
+        isInCorner = sidewaysDiff > 0
+        if isInCorner:
             sidewaysDiff = max(0, sidewaysDiff + 0.4*(carLocation.y * teamDirection - (5120-100)))
             inTriangleAmount = max(0, min(1, sidewaysDiff / 4500))
             scale = 0.55
@@ -60,12 +95,66 @@ class Dribble(State):
             inTriangleAmount = 0
         targetBallLocation = Vec3(0, (5120+100 - sidewaysDiff * scale) * teamDirection, 0)
 
-        action_display = f"{round(inTriangleAmount, 1)}"
+
+
+        ## if convenient, change ball location to nearby boost pad.
+        fieldInfo = self.agent.get_field_info()
+        carFutureLocation = carLocation + 0.2 * carVelocity
+        ballToCarAbsoluteLocation = (ballLocation - carLocation).flat()
+        ballToCarDistance = ballToCarAbsoluteLocation.length()
+        ballToFutureCarAbsoluteLocation = (ballLocation - carFutureLocation).flat()
+        ballToFutureCarDistance = ballToFutureCarAbsoluteLocation.length()
+        goingForBoost = False
+        if ballToCarDistance > 250 and myCar.boost < 88:
+            convenientBoostPads = []
+            costs = []
+            for i in range(fieldInfo.num_boosts):
+                if not packet.game_boosts[i].is_active:
+                    continue
+                boostPad = fieldInfo.boost_pads[i]
+                boostLocation = Vec3(boostPad.location)
+
+                maxOffset = (208 if boostPad.is_full_boost else 144) - 20
+                orth = (boostLocation - carLocation).orthogonalize(ballToCarAbsoluteLocation)
+                boostLocation -= orth.normalized() * min(orth.length(), maxOffset)
+                
+                carToBoostLength = (boostLocation - carFutureLocation).length()
+                detourLength = (ballLocation - boostLocation).length() + carToBoostLength
+                cost = (detourLength - ballToFutureCarDistance) / (1450 if boostPad.is_full_boost else 250)
+                costs.append(cost)
+                if cost < ((100 - myCar.boost) / 100) ** 1.5:
+                    convenientBoostPads.append((i, carToBoostLength * cost, boostLocation))
+                    #self.agent.renderer.draw_line_3d(boostLocation, boostLocation + Vec3(0, 0, 100), self.agent.renderer.pink())
+                
+            #print(round(min(costs), 1))
+
+            if len(convenientBoostPads) > 0:
+                convenientBoostPads.sort(key=lambda b: b[1], reverse=False)
+                boostPad = fieldInfo.boost_pads[convenientBoostPads[0][0]]
+                boostLocation = convenientBoostPads[0][2]
+                #self.agent.renderer.draw_line_3d(boostLocation, boostLocation + Vec3(0, 0, 400), self.agent.renderer.pink())
+
+                ballLocation = boostLocation
+                ballVelocity = Vec3(0, 0, 0)
+                
+                ballToCarAbsoluteLocation = (ballLocation - carLocation).flat()
+                ballToCarDistance = ballToCarAbsoluteLocation.length()
+                goingForBoost = True
+                
+
+
+        ## time to next bounce
+        if not goingForBoost:
+            pass
+
+
+
+
+
 
         ## calculate angles
         ballDirection = math.atan2(ballVelocity.y, -ballVelocity.x)
         carDirection = -myCar.physics.rotation.yaw
-        ballToCarAbsoluteLocation = (ballLocation - carLocation).flat()
         carToBallAngle = math.atan2(ballToCarAbsoluteLocation.y, -ballToCarAbsoluteLocation.x) - carDirection
         if abs(carToBallAngle) > math.pi:
             if carToBallAngle > 0:
@@ -98,55 +187,133 @@ class Dribble(State):
         else:
             self.carToTargetIntegral = Vec3()
 
+
+        
+        canYeet = myCar.has_wheel_contact \
+                and (not goingForBoost) \
+                and ballToCarLocation.length() < 275 \
+                and ballLocation.z > 100 \
+                and ballLocation.z < 275 \
+                and packet.game_info.seconds_elapsed - packet.game_ball.latest_touch.time_seconds < 0.1
+        teamDirection = 1 if packet.game_cars[self.agent.index].team == 0 else -1
+        inCornerDegree = math.atan((max(abs(carLocation.x), 893)-893) / max(5120 - carLocation.y*teamDirection, 1))
+        shouldYeet = ((ballLocation + 1 * ballVelocity).flat() - Vec3(0, 5120+100 * teamDirection, 0)).length() < 1500 \
+                and inCornerDegree < math.pi * 2 / 6 \
+                and 4200 - abs(ballLocation.y) < 0.7 * abs(ballVelocity.y)
+
+        #print(f"{canYeet}\t{shouldYeet}\t{round(4200 - abs(ballLocation.y))}\t{round(0.7 * abs(ballVelocity.y))}")
+        #action_display = f"{round((ballLocation.flat() - Vec3(0, 5120+100 * teamDirection, 0)).length())}"
+        carlocs = []
+        if canYeet and shouldYeet:
+
+            inComingCar = False
+            for i in range(packet.num_cars):
+                if i == self.agent.index:
+                    continue
+                car = packet.game_cars[i]
+                if car.team == myCar.team:
+                    continue
+                #print(round(0.1 + norm(carAccelerations[i]) / RLUDrive.throttle_accel(Vec3(car.physics.velocity).length()), 2))
+                for throttle in (0, min(1, 0.1 + norm(carAccelerations[i]) / RLUDrive.throttle_accel(Vec3(car.physics.velocity).length()))):
+                    carBoost = car.boost
+                    
+                    attackerCarLocation = Vec3(car.physics.location)
+                    # divide by 120, to go from per second to per frame
+                    STEPSIZE = 120
+                    gravity = packet.game_info.world_gravity_z / STEPSIZE**2
+                    attackerCarVelocity = vec3(car.physics.velocity.x, car.physics.velocity.y, car.physics.velocity.z) / STEPSIZE
+                    attackerCarAngular  = axis_to_rotation(vec3(car.physics.angular_velocity.x, car.physics.angular_velocity.y, car.physics.angular_velocity.z) / STEPSIZE)
+                    
+                    ballV = ballVelocity / STEPSIZE
+
+                    for j in range(round(STEPSIZE * 0.7)): # simulate 40 ticks forwards
+                        attackerCarLocation += Vec3(attackerCarVelocity[0], attackerCarVelocity[1], attackerCarVelocity[2])
+                        if car.has_wheel_contact:
+                            attackerCarVelocity = dot(attackerCarAngular, attackerCarVelocity)
+                        attackerCarVelocity += vec3(0, 0, gravity)
+                        if throttle == 0:
+                            attackerCarVelocity -= vec3(math.copysign(min(525 / STEPSIZE, abs(attackerCarVelocity[0])), attackerCarVelocity[0]), 0, 0)
+                        else:
+                            acceleration = (991.667*(carBoost>0) + RLUDrive.throttle_accel(norm(attackerCarVelocity)))
+                            attackerCarVelocity += normalize(attackerCarVelocity) * acceleration / STEPSIZE
+                        if attackerCarLocation.z < ballLocation.z:
+                            attackerCarLocation.z = ballLocation.z
+                        carlocs.append(attackerCarLocation)
+                        if (attackerCarLocation - ballLocation + j * ballV).flat().length() < 750: # longest car has a diagonal of 157uu
+                            inComingCar = True
+                            break
+                        #print(f"{j}\t{ (attackerCarLocation - ballLocation + j * ballV).flat().length()}")
+                    if inComingCar:
+                        break
+
+                    carBoost -= 1 / 3 / STEPSIZE
+                    
+
+
+                if inComingCar:
+
+                    self.agent.stateMachine.changeStateMidTick(Yeet)
+                    return inComingCar
+
+
+
+        if kickoff and (carLocation - realBallLocation).length() < 800 and myCar.has_wheel_contact:
+            self.agent.stateMachine.changeStateMidTick(Frontflip)
+            return True
+
+
         ## STEERING
         steer = 0
         steerBias = 0
         # ball to car proportional
         #print(f"{round(min(15, max(-15, 0.02 * ballToCarLocation.y)), 2)}\t{round(0.003 * ballToCarVelocity.y, 2)}")
         steer += min(15, max(-15, 0.02 * ballToCarLocation.y))
-        # ball to car derivative
-        steer += 0.005 * ballToCarVelocity.y
-        #print(f"pos: {round(min(15, max(-15, 0.02 * ballToCarLocation.y)), 2)}\tvel: {round(0.009 * ballToCarVelocity.y,2)}")
-        # ball to target proportional
-        targetSteer = ballToTargetLocation.y
-        action_display = f"{round(carToTargetLocation.x)}"
-        if carToTargetLocation.x > 300:
-            targetSteer = math.copysign(100000, targetSteer)
-        steerBias += 0.005 * targetSteer
-        # ball to target derivative
-        #steerBias += 0.002 * carToTargetVelocity.y
-        # ball to target integral
-        #steerBias += 0.000001 * self.carToTargetIntegral.y
-        #print(f"{round(steerBias, 1)}\t{round(0.008 * carToTargetVelocity.y, 1)}")
-        
-        if kickoff:
-            self.steerBiasLimit = 0
-        elif abs(carLocation.x) < 930 and abs(carLocation.y) < 5120-550:
-            self.steerBiasLimit = 2.5
-        if ballLocation.z > 160 or ballToCarLocation.length() > 800:
-            self.steerBiasLimit = max(0.5, self.steerBiasLimit - 0.1)
-        elif ballLocation.z < 100:
-            self.steerBiasLimit = max(0.5, self.steerBiasLimit - 0.1)
-        else:
-            self.steerBiasLimit = min(2.5, 1 + 1 * max(0, carSpeed - 600) / 1800, self.steerBiasLimit + 0.065)
+        if not goingForBoost:
+            # ball to car derivative
+            steer += 0.005 * ballToCarVelocity.y
+            #print(f"pos: {round(min(15, max(-15, 0.02 * ballToCarLocation.y)), 2)}\tvel: {round(0.009 * ballToCarVelocity.y,2)}")
+            # ball to target proportional
+            targetSteer = ballToTargetLocation.y
+            #action_display = f"{round(carToTargetLocation.x)}"
+            if carToTargetLocation.x > 300:
+                targetSteer = math.copysign(100000, targetSteer)
+            steerBias += 0.005 * targetSteer
+            # ball to target derivative
+            #steerBias += 0.002 * carToTargetVelocity.y
+            # ball to target integral
+            #steerBias += 0.000001 * self.carToTargetIntegral.y
+            #print(f"{round(steerBias, 1)}\t{round(0.008 * carToTargetVelocity.y, 1)}")
+            
+            applySpeedLimit = True
+            if kickoff:
+                self.steerBiasLimit = 0
+            if abs(carLocation.x) < 930 and abs(carLocation.y) > 5120-550 and ballLocation.z > 500:
+                self.steerBiasLimit = 2.5
+                applySpeedLimit = False
+            if ballLocation.z > 160 or ballToCarLocation.length() > 800:
+                self.steerBiasLimit = max(0.5, self.steerBiasLimit - 0.1)
+            elif ballLocation.z < 100:
+                self.steerBiasLimit = max(0.5, self.steerBiasLimit - 0.1)
+            else:
+                self.steerBiasLimit = min(2.5, 1 + 1 * max(0, carSpeed - 600) / 1800, self.steerBiasLimit + 0.065)
 
-        if ballToCarLocation.length() < 180:
-            print((1400 - carVelocity.flat().length()) / 350)
-            self.steerBiasLimit = min(self.steerBiasLimit, 1.3 + (1400 - carVelocity.flat().length()) / 800)
+            if applySpeedLimit and ballToCarLocation.length() < 180:
+                self.steerBiasLimit = min(self.steerBiasLimit, 1.3 + (1400 - carVelocity.flat().length()) / 800)
 
-        steer += min(self.steerBiasLimit, max(-self.steerBiasLimit, steerBias))
-        action_display = f"SBL {round(self.steerBiasLimit, 1)} SB: {round(min(self.steerBiasLimit, max(-self.steerBiasLimit, steerBias)), 1)}" 
-        #action_display = f"{round(ballToTargetLocation.x)}"
+            steer += min(self.steerBiasLimit, max(-self.steerBiasLimit, steerBias))
+            action_display = f"SBL {round(self.steerBiasLimit, 1)} SB: {round(min(self.steerBiasLimit, max(-self.steerBiasLimit, steerBias)), 1)}" 
+            #action_display = f"{round(ballToTargetLocation.x)}"
 
         ## THROTTLE
         throttle = 0
         # ball to car proportional
-        throttle += 0.04 * ballToCarLocation.x
+        throttle += 0.07 * ballToCarLocation.x
         # ball to car derivative
-        throttle += 0.01 * ballToCarVelocity.x
+        throttle += 0.015 * ballToCarVelocity.x
+        
 
         #print(ballVelocity.length())
-        if ballToCarLocation.length() < 300 and not (abs(ballToCarLocation.y) > 100 and ballVelocity.length() < 500): # if the ball is too far from the car, use speed to drive car to ball
+        if (ballToCarLocation.length() < 300 and not (abs(ballToCarLocation.y) > 100 and ballVelocity.length() < 500)): # if the ball is too far from the car, use speed to drive car to ball
 
 
             throttleBias = 0
@@ -177,16 +344,35 @@ class Dribble(State):
 
         #print(action_display)
 
-        
+        if goingForBoost:
+            throttle = max(throttle, 1)
 
         ## set controller state
         self.controllerState.steer = min(1, max(-1, steer))
         self.controllerState.throttle = min(1, max(-1, throttle))
         self.controllerState.boost = False
-        if throttle > 1.4 and carLocation.z < 100:
-            self.controllerState.boost = carSpeed < 2299.5
+        if myCar.has_wheel_contact and throttle > 1.7 and carLocation.z < 100 and realBallLocation.z < 500:
+            self.controllerState.boost = carSpeed < 2300 - 991.667/120
 
 
+            ## test if forward dodge is needed
+            if abs(steer) < 0.5 and not kickoff and carSpeed > 1400 and carSpeed < 2200 and (myCar.boost == 0 or carSpeed > 2300-20-500):
+                
+                try:
+                    angleCoeff = carVelocity.normalized().dot(ballVelocity.normalized())
+                except:
+                    angleCoeff = -1
+
+                if angleCoeff > 0.95:
+
+                    dist = (realBallLocation - carLocation).length()
+                    vel = (carSpeed + 500 - ballVelocity.length())
+                    time = dist / vel
+                    ballAfterLocation = realBallLocation + time * ballVelocity
+                    isStillInMap = abs(ballAfterLocation.x) < 4096 + 500 and abs(ballAfterLocation.y) < 5120 + 500
+                    if time > 1.5:
+                        self.agent.stateMachine.changeStateMidTick(Frontflip)
+                        return True
 
 
 
@@ -222,7 +408,7 @@ class Dribble(State):
 
         
         targetBallLocation.z = 150
-        draw_debug(self.agent, myCar, packet.game_ball, action_display, targetBallLocation)
+        #draw_debug(self.agent, myCar, packet.game_ball, action_display, targetBallLocation, carlocs)
 
         return True
 
@@ -232,62 +418,46 @@ class Dribble(State):
 
 
 
-def getTargetBall(agent, packet: GameTickPacket, carLocation: Vec3) -> (Vec3, Vec3, float):
-    # RADIUS = 1200
-    # SPEED = 0.8
-    # VELOCITY = SPEED
-    # try:
-    #     angle = SPEED * packet.game_info.seconds_elapsed 
-    #     return  Vec3(RADIUS * math.sin(angle),
-    #                  RADIUS * math.cos(angle),
-    #                  0), \
-    #             Vec3(RADIUS * math.cos(angle),
-    #                  RADIUS * -math.sin(angle),
-    #                  0) * VELOCITY, \
-    #             angle
-    # except Exception:
-    #     return Vec3()
+# def getTargetBall(agent, packet: GameTickPacket, carLocation: Vec3) -> (Vec3, Vec3, float):
+#     # RADIUS = 1200
+#     # SPEED = 0.8
+#     # VELOCITY = SPEED
+#     # try:
+#     #     angle = SPEED * packet.game_info.seconds_elapsed 
+#     #     return  Vec3(RADIUS * math.sin(angle),
+#     #                  RADIUS * math.cos(angle),
+#     #                  0), \
+#     #             Vec3(RADIUS * math.cos(angle),
+#     #                  RADIUS * -math.sin(angle),
+#     #                  0) * VELOCITY, \
+#     #             angle
+#     # except Exception:
+#     #     return Vec3()
 
-    teamDirection = 1 if packet.game_cars[agent.index].team == 0 else -1
-    sidewaysDiff = abs(carLocation.x)-893+100
-    if sidewaysDiff > 0:
-        sidewaysDiff = max(0, sidewaysDiff + 0.4*(carLocation.y * teamDirection - (5120-100)))
-        scale = 0.6
-    else:
-        scale = 2
-    return Vec3(0, (5120+100 - sidewaysDiff * scale) * teamDirection, 0), Vec3(0, 0 * teamDirection, 0), 0
-
-
-
-
-
+#     teamDirection = 1 if packet.game_cars[agent.index].team == 0 else -1
+#     sidewaysDiff = abs(carLocation.x)-893+100
+#     if sidewaysDiff > 0:
+#         sidewaysDiff = max(0, sidewaysDiff + 0.4*(carLocation.y * teamDirection - (5120-100)))
+#         scale = 0.6
+#         print("hi")
+#     else:
+#         scale = 2
+#         print("ho")
+#     print("sup")
+#     return Vec3(0, (5120+100 - sidewaysDiff * scale) * teamDirection, 0), Vec3(0, 0 * teamDirection, 0), 0
 
 
 
 
-        
-def find_correction(current: Vec3, ideal: Vec3) -> float:
-    # Finds the angle from current to ideal vector in the xy-plane. Angle will be between -pi and +pi.
-
-    # The in-game axes are left handed, so use -x
-    current_in_radians = math.atan2(current.y, -current.x)
-    ideal_in_radians = math.atan2(ideal.y, -ideal.x)
-
-    diff = current_in_radians - ideal_in_radians
-
-    # Make sure that diff is between -pi and +pi.
-    if abs(diff) > math.pi:
-        if diff < 0:
-            diff += 2 * math.pi
-        else:
-            diff -= 2 * math.pi
-
-    return diff
 
 
-def draw_debug(agent, car, ball, action_display, targetBallLocation):
+
+
+
+
+
+def draw_debug(agent, car, ball, action_display, targetBallLocation, carlocs):
     renderer = agent.renderer
-    renderer.begin_rendering()
     ballPrediction = agent.get_ball_prediction_struct()
     
     predictionLine = []
@@ -295,9 +465,9 @@ def draw_debug(agent, car, ball, action_display, targetBallLocation):
         for i in range(0, ballPrediction.num_slices):
             predictionLine.append(Vec3(ballPrediction.slices[i].physics.location))
 
-    agent.renderer.begin_rendering()
     red = agent.renderer.create_color(255, 255, 30, 30)
-    agent.renderer.draw_polyline_3d(predictionLine, red)
+    if len(carlocs) > 1:
+        agent.renderer.draw_polyline_3d(carlocs, red)
     # draw a line from the car to the ball
     renderer.draw_line_3d(car.physics.location, ball.physics.location, renderer.white())
     renderer.draw_line_3d(targetBallLocation, ball.physics.location, renderer.white())
