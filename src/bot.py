@@ -2,8 +2,7 @@ import math
 
 from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
 from rlbot.utils.structures.game_data_struct import GameTickPacket
-from rlbot.utils.structures.quick_chats import QuickChats
-
+from rlbot.utils.structures.quick_chats import QuickChats # pylint: disable=no-member
 from util.orientation import Orientation
 from util.vec import Vec3
 import util.const

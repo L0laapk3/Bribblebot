@@ -37,6 +37,7 @@ boostSpeed = 2299
 # TODO get boost when ball is high in the air
 # TODO better flick
 # TODO no flick when OT
+# TODO fix flick when not on blue team
 
 
 class Dribble(State):

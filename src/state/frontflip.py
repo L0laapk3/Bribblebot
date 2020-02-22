@@ -29,6 +29,7 @@ class Frontflip(State):
 
         if self.startTick == 0:
             self.startTick = self.agent.tick
+
         ticksElapsed = self.agent.tick - self.startTick
             
 
@@ -49,7 +50,6 @@ class Frontflip(State):
                 self.controllerState.jump = True
 
         self.controllerState.pitch = -1
-        self.controllerState.throttle = 1
         self.controllerState.throttle = 1
 
         #print(f"{ticksElapsed}\t{self.controllerState.jump}")
