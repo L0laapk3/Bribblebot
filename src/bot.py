@@ -7,6 +7,7 @@ from util.orientation import Orientation
 from util.vec import Vec3
 import util.const
 
+import sys
 from stateMachine import StateMachine
 
 class L0lbot(BaseAgent):
@@ -26,6 +27,7 @@ class L0lbot(BaseAgent):
         self.lastQuickChatTime = 0
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
+        print(sys.path)
         self.packet = packet
 
         self.handleTime()
