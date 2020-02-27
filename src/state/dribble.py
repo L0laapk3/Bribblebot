@@ -98,11 +98,31 @@ class Dribble(State):
 
 
 
+
+        ballToCarAbsoluteLocation = (ballLocation - carLocation).flat()
+        ballToCarDistance = ballToCarAbsoluteLocation.length()
+        ## if teammate is closer to the ball, go to defend position.
+        defending = False
+        for carIndex in range(packet.num_cars):
+            car = packet.game_cars[carIndex]
+            if car.team == self.agent.team and carIndex != self.agent.index:
+                carDist = (Vec3(car.physics.location) - ballLocation).length()
+                if carDist + 0.5 * math.copysign(1, carIndex - self.agent.index) < ballToCarDistance:
+
+                    defending = True
+                    ballToCarAbsoluteLocation = (ballLocation - carLocation).flat()
+                    ballToCarDistance = ballToCarAbsoluteLocation.length()
+                    break
+
+
+
+
+
+
+
         ## if convenient, change ball location to nearby boost pad.
         fieldInfo = self.agent.get_field_info()
         carFutureLocation = carLocation + 0.2 * carVelocity
-        ballToCarAbsoluteLocation = (ballLocation - carLocation).flat()
-        ballToCarDistance = ballToCarAbsoluteLocation.length()
         ballToFutureCarAbsoluteLocation = (ballLocation - carFutureLocation).flat()
         ballToFutureCarDistance = ballToFutureCarAbsoluteLocation.length()
         goingForBoost = False
@@ -198,7 +218,7 @@ class Dribble(State):
                 and packet.game_info.seconds_elapsed - packet.game_ball.latest_touch.time_seconds < 0.1
         teamDirection = 1 if packet.game_cars[self.agent.index].team == 0 else -1
         inCornerDegree = math.atan((max(abs(carLocation.x), 893)-893) / max(5120 - carLocation.y*teamDirection, 1))
-        shouldYeet = ((ballLocation + 1 * ballVelocity).flat() - Vec3(0, 5120+100 * teamDirection, 0)).length() < 1500 \
+        shouldYeet = ((ballLocation + 1 * ballVelocity).flat() * teamDirection - Vec3(0, 5120+100, 0)).length() < 1500 \
                 and inCornerDegree < math.pi * 2 / 6 \
                 and 4200 - abs(ballLocation.y) < 0.7 * abs(ballVelocity.y)
 
@@ -408,7 +428,7 @@ class Dribble(State):
 
 
         
-        targetBallLocation.z = 150
+        # targetBallLocation.z = 150
         #draw_debug(self.agent, myCar, packet.game_ball, action_display, targetBallLocation, carlocs)
 
         return True

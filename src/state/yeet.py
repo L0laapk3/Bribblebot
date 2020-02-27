@@ -1,5 +1,6 @@
 from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
 from rlbot.utils.structures.game_data_struct import GameTickPacket
+from rlbot.utils.structures.quick_chats import QuickChats
 
 from util.orientation import Orientation
 from util.vec import Vec3
@@ -13,7 +14,7 @@ import math
 class Yeet(State):
     def __init__(self, agent: BaseAgent): 
         super().__init__(agent)
-        print("YEEEEEEEEEEEEEET")
+        self.agent.send_quick_chat(QuickChats.CHAT_EVERYONE, QuickChats.Custom_Exclamation_Yeet)
         self.startTick = 0
         self.state = 0
         self.lastBallHit = 0

@@ -2,7 +2,7 @@ import math
 
 from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
 from rlbot.utils.structures.game_data_struct import GameTickPacket
-from rlbot.utils.structures.quick_chats import QuickChats # pylint: disable=no-member
+from rlbot.utils.structures.quick_chats import QuickChats
 from util.orientation import Orientation
 from util.vec import Vec3
 import util.const
@@ -10,7 +10,8 @@ import util.const
 import sys
 from stateMachine import StateMachine
 
-class L0lbot(BaseAgent):
+
+class BribbleBot(BaseAgent):
 
     def initialize_agent(self):
         # This runs once before the bot starts up
@@ -27,14 +28,13 @@ class L0lbot(BaseAgent):
         self.lastQuickChatTime = 0
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
-        print(sys.path)
         self.packet = packet
 
         self.handleTime()
 
         ballY = packet.game_ball.physics.location.y
 
-        if abs(ballY) > 5050 and packet.game_info.seconds_elapsed - self.lastQuickChatTime > 5:
+        if abs(ballY) > 5120+60 and packet.game_info.seconds_elapsed - self.lastQuickChatTime > 15:
             teamDirection = 1 if packet.game_ball.latest_touch.team == 0 else -1
             if ballY * teamDirection > 0:
                 if packet.game_ball.latest_touch.team == packet.game_cars[self.index].team:
