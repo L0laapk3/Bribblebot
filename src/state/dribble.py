@@ -99,19 +99,66 @@ class Dribble(State):
 
 
 
+        ## if teammate is closer to the ball, go to defend position.
         ballToCarAbsoluteLocation = (ballLocation - carLocation).flat()
         ballToCarDistance = ballToCarAbsoluteLocation.length()
-        ## if teammate is closer to the ball, go to defend position.
-        defending = False
+        futurePositionScoreVector = ballLocation + 1 * ballVelocity - carLocation
+        positionScore = Vec3(futurePositionScoreVector.x, futurePositionScoreVector.y * (1 if futurePositionScoreVector.y * (2*self.agent.team-1) < 0 else 3), 0).length()\
+                      + Vec3(ballToCarAbsoluteLocation.x, ballToCarAbsoluteLocation.y * (1 if ballToCarAbsoluteLocation.y * (2*self.agent.team-1) < 0 else 3), 0).length()
+
+        beAnnoying = False
         for carIndex in range(packet.num_cars):
             car = packet.game_cars[carIndex]
-            if car.team == self.agent.team and carIndex != self.agent.index:
-                carDist = (Vec3(car.physics.location) - ballLocation).length()
-                if carDist + 0.5 * math.copysign(1, carIndex - self.agent.index) < ballToCarDistance:
+            if car.team == self.agent.team and carIndex != self.agent.index and not car.is_demolished:
+                OtherCarToBall = ballLocation - Vec3(car.physics.location)
+                OtherFutureCarToBall = ballLocation + 1 * ballVelocity - Vec3(car.physics.location)
+                otherPositionScore = Vec3(OtherCarToBall.x      , OtherCarToBall.y       * (1 if OtherCarToBall.y       * (2*self.agent.team-1) < 0 else 3), 0).length()\
+                                   + Vec3(OtherFutureCarToBall.x, OtherFutureCarToBall.y * (1 if OtherFutureCarToBall.y * (2*self.agent.team-1) < 0 else 3), 0).length()
 
-                    defending = True
-                    ballToCarAbsoluteLocation = (ballLocation - carLocation).flat()
-                    ballToCarDistance = ballToCarAbsoluteLocation.length()
+                # print(f"[{self.agent.index} {round(positionScore)}] {carIndex}: {round(otherPositionScore)}!")
+                if otherPositionScore + math.copysign(5, carIndex - self.agent.index) < positionScore:
+
+                    # print(f"{self.agent.index} other one is closer!")
+
+                    teamClosestDistance = math.inf
+                    enemyClosestDistance = math.inf
+                    for carIndex in range(packet.num_cars):
+                        car = packet.game_cars[carIndex]
+                        distance = (ballLocation - Vec3(car.physics.location)).flat().length()
+                        if car.team == self.agent.team:
+                            teamClosestDistance = min(teamClosestDistance, distance)
+                        else:
+                            enemyClosestDistance = min(enemyClosestDistance, distance)
+                    teamHasBallControl = teamClosestDistance - 500 < enemyClosestDistance
+
+
+                    targetScore = math.inf
+                    target = None
+                    for carIndex in range(packet.num_cars):
+                        car = packet.game_cars[carIndex]
+                        # print(f"[{self.agent.index} {self.agent.team}] {carIndex} {car.team}")
+                        if car.team != self.agent.team:
+                            score = (ballLocation - Vec3(car.physics.location)).flat().length() + teamHasBallControl * (Vec3(0, 5120 * (2*car.team-1), 0) - Vec3(car.physics.location)).flat().length()
+                            # print(f"[{self.agent.index}] considering car {carIndex}")
+                            if score < targetScore:
+                                targetScore = score
+                                target = car
+
+                    if target != None:
+
+                        beAnnoying = True
+
+                        huntLocation = Vec3(target.physics.location)
+                        for _ in range(20):
+                            time = min(.6, (carLocation - huntLocation).length() / carSpeed)
+                            huntLocation = Vec3(target.physics.location) + time * Vec3(target.physics.velocity)
+
+                        ballLocation = huntLocation
+                        ballVelocity = Vec3(0, 0, 0)#Vec3(target.physics.velocity)
+                        ballToCarAbsoluteLocation = (ballLocation - carLocation).flat()
+                        ballToCarDistance = ballToCarAbsoluteLocation.length()
+
+
                     break
 
 
@@ -232,7 +279,7 @@ class Dribble(State):
                 if i == self.agent.index:
                     continue
                 car = packet.game_cars[i]
-                if car.team == myCar.team:
+                if car.team == myCar.team or car.is_demolished:
                     continue
                 #print(round(0.1 + norm(carAccelerations[i]) / RLUDrive.throttle_accel(Vec3(car.physics.velocity).length()), 2))
                 for throttle in (0, min(1, 0.1 + norm(carAccelerations[i]) / RLUDrive.throttle_accel(Vec3(car.physics.velocity).length()))):
@@ -306,7 +353,7 @@ class Dribble(State):
             #print(f"{round(steerBias, 1)}\t{round(0.008 * carToTargetVelocity.y, 1)}")
             
             applySpeedLimit = True
-            if kickoff:
+            if kickoff or beAnnoying:
                 self.steerBiasLimit = 0
             if abs(carLocation.x) < 930 and abs(carLocation.y) > 5120-550 and ballLocation.z > 500:
                 self.steerBiasLimit = 2.5
@@ -334,7 +381,7 @@ class Dribble(State):
         
 
         #print(ballVelocity.length())
-        if (ballToCarLocation.length() < 300 and not (abs(ballToCarLocation.y) > 100 and ballVelocity.length() < 500)): # if the ball is too far from the car, use speed to drive car to ball
+        if (ballToCarLocation.length() < 300 and not (abs(ballToCarLocation.y) > 100 and ballVelocity.length() < 500)) and not beAnnoying: # if the ball is too far from the car, use speed to drive car to ball
 
 
             throttleBias = 0
@@ -371,9 +418,10 @@ class Dribble(State):
         ## set controller state
         self.controllerState.steer = min(1, max(-1, steer))
         self.controllerState.throttle = min(1, max(-1, throttle))
-        self.controllerState.boost = False
         if myCar.has_wheel_contact and throttle > 1.7 and carLocation.z < 100 and realBallLocation.z < 500:
-            self.controllerState.boost = carSpeed < 2300 - 991.667/120
+            self.controllerState.boost = carSpeed < 2300 - 991.667/120 * (1 if self.controllerState.boost else 10)
+        else:
+            self.controllerState.boost = False
 
 
             ## test if forward dodge is needed

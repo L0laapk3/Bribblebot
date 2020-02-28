@@ -26,6 +26,7 @@ class BribbleBot(BaseAgent):
         self.tick = 0
         self.FPS = 120
         self.lastQuickChatTime = 0
+        self.secondMessage = None
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         self.packet = packet
@@ -36,19 +37,43 @@ class BribbleBot(BaseAgent):
 
         if abs(ballY) > 5120+60 and packet.game_info.seconds_elapsed - self.lastQuickChatTime > 15:
             teamDirection = 1 if packet.game_ball.latest_touch.team == 0 else -1
+            firstByToucher = True
             if ballY * teamDirection > 0:
                 if packet.game_ball.latest_touch.team == packet.game_cars[self.index].team:
-                    self.send_quick_chat(QuickChats.CHAT_EVERYONE, QuickChats.Compliments_NiceShot)
-                    self.send_quick_chat(QuickChats.CHAT_EVERYONE, QuickChats.Compliments_Thanks)
+                    firstMessage, secondMessage = QuickChats.Compliments_NiceShot, QuickChats.Compliments_Thanks
+                    firstByToucher = False
                 else:
-                    self.send_quick_chat(QuickChats.CHAT_EVERYONE, QuickChats.Apologies_Whoops)
-                    self.send_quick_chat(QuickChats.CHAT_EVERYONE, QuickChats.Apologies_NoProblem)
+                    firstMessage, secondMessage = QuickChats.Apologies_Whoops, QuickChats.Apologies_NoProblem
             
             else:
-                self.send_quick_chat(QuickChats.CHAT_EVERYONE, QuickChats.Reactions_Savage)
-                self.send_quick_chat(QuickChats.CHAT_EVERYONE, QuickChats.Compliments_WhatASave)
+                firstMessage, secondMessage = QuickChats.Compliments_WhatASave, QuickChats.Reactions_Savage
+
+            bribbleBots = []
+            latestTouchIsBribble = False
+            for carIndex in range(packet.num_cars):
+                car = packet.game_cars[carIndex]
+                if car.team == self.team and "Bribblebot" in car.name:
+                    bribbleBots.append(carIndex)
+                    if packet.game_ball.latest_touch.player_index == carIndex:
+                        latestTouchIsBribble = True
+            
+            if len(bribbleBots) == 1:
+                self.send_quick_chat(QuickChats.CHAT_EVERYONE, firstMessage)
+                self.secondMessage = secondMessage
+            else:
+                sendFirst = packet.game_ball.latest_touch.player_index == self.index or (not latestTouchIsBribble and self.index == min(bribbleBots))
+                if not sendFirst ^ firstByToucher:
+                    self.send_quick_chat(QuickChats.CHAT_EVERYONE, firstMessage)
+                else:
+                    self.secondMessage = secondMessage
+
 
             self.lastQuickChatTime = packet.game_info.seconds_elapsed
+
+
+        elif packet.game_info.seconds_elapsed - self.lastQuickChatTime > 0.2 and self.secondMessage != None:
+            self.send_quick_chat(QuickChats.CHAT_EVERYONE, self.secondMessage)
+            self.secondMessage = None
 
 
         return self.stateMachine.tick(packet)
