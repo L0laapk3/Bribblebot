@@ -1,4 +1,4 @@
-from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
+from rlbot.agents.base_agent import BaseAgent
 from rlbot.utils.structures.game_data_struct import GameTickPacket
 from rlbot.utils.game_state_util import GameState, BallState, CarState, Physics, Vector3, Rotator, GameInfoState
 

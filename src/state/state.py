@@ -7,4 +7,4 @@ class State:
 
     def __init__(self, agent: BaseAgent):
         self.agent = agent
-        self.controllerState = SimpleControllerState()
+        self.controller = SimpleControllerState()

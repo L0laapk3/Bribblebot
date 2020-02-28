@@ -95,6 +95,8 @@ class BribbleBot(BaseAgent):
             if int(self.lastTime) != int(self.packet.game_info.seconds_elapsed):
                 if self.skippedTicks > 0:
                     print(f"dropped {self.skippedTicks} ticks last second!")
+                    if self.skippedTicks > 10:
+                        self.send_quick_chat(QuickChats.CHAT_EVERYONE, QuickChats.Custom_Excuses_Lag)
                 self.skippedTicks = self.doneTicks = 0
 
             self.ticksThisPacket = round(max(1, (self.packet.game_info.seconds_elapsed - self.lastTime) * self.FPS))

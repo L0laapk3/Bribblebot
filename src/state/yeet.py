@@ -1,4 +1,4 @@
-from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
+from rlbot.agents.base_agent import BaseAgent
 from rlbot.utils.structures.game_data_struct import GameTickPacket
 from rlbot.utils.structures.quick_chats import QuickChats
 
@@ -73,11 +73,11 @@ class Yeet(State):
             else:
                 if ticksElapsed < minJumpTick:
                     self.lastBallHit = packet.game_ball.latest_touch.time_seconds
-                self.controllerState.jump = True
+                self.controller.jump = True
         
         if self.state == 1:
-                if self.controllerState.jump: # set it to false for one input frame
-                    self.controllerState.jump = False
+                if self.controller.jump: # set it to false for one input frame
+                    self.controller.jump = False
                 else:
                     self.state = 2
         if self.state == 2:
@@ -91,8 +91,8 @@ class Yeet(State):
                     self.alpha *= max(0, 1 - (160 - ballToCarDistance) / 50)
                     
 
-                self.controllerState.roll = -(self.beta * dodgeDirectionMaxOumpf.y if self.alpha > 0.5 else dodgeDirectionMaxAim.y)
-                self.controllerState.jump = True
+                self.controller.roll = -(self.beta * dodgeDirectionMaxOumpf.y if self.alpha > 0.5 else dodgeDirectionMaxAim.y)
+                self.controller.jump = True
 
                 
 
@@ -101,8 +101,8 @@ class Yeet(State):
             pitch = math.copysign(1, pitch)
         else:
             pitch = 0
-        self.controllerState.pitch = pitch
-        self.controllerState.throttle = 1
+        self.controller.pitch = pitch
+        self.controller.throttle = 1
 
         #print(f"{ticksElapsed}\t{self.state}\t{newHit}\t{round(ballRelativeCarLocation.length(), 2)}\t{round(ballLocation.z - carLocation.z)}\t{round(ballToCarLocation.length())}\t{round(ballToCarDistance)}")
         return True

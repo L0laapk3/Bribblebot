@@ -1,4 +1,4 @@
-from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
+from rlbot.agents.base_agent import BaseAgent
 from rlbot.utils.structures.game_data_struct import GameTickPacket
 
 from util.orientation import Orientation
@@ -38,19 +38,19 @@ class Frontflip(State):
             if ticksElapsed >= jumpTick:
                 self.state = 1
             else:
-                self.controllerState.jump = True
+                self.controller.jump = True
         
         if self.state == 1:
-                if self.controllerState.jump: # set it to false for one input frame
-                    self.controllerState.jump = False
+                if self.controller.jump: # set it to false for one input frame
+                    self.controller.jump = False
                 else:
                     self.state = 2
         if self.state == 2:
                 self.state = 3
-                self.controllerState.jump = True
+                self.controller.jump = True
 
-        self.controllerState.pitch = -1
-        self.controllerState.throttle = 1
+        self.controller.pitch = -1
+        self.controller.throttle = 1
 
-        #print(f"{ticksElapsed}\t{self.controllerState.jump}")
+        #print(f"{ticksElapsed}\t{self.controller.jump}")
         return True

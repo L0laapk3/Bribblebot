@@ -27,7 +27,7 @@ class StateMachine:
                 self.selectState(packet)
             assert self.currentState.tick(packet), "State exited without doing tick"
 
-        return self.currentState.controllerState
+        return self.currentState.controller
 
 
 

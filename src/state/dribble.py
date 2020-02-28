@@ -1,4 +1,4 @@
-from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
+from rlbot.agents.base_agent import BaseAgent
 from rlbot.utils.structures.game_data_struct import GameTickPacket
 
 from util.orientation import Orientation
@@ -150,7 +150,7 @@ class Dribble(State):
 
                         huntLocation = Vec3(target.physics.location)
                         for _ in range(20):
-                            time = min(.6, (carLocation - huntLocation).length() / carSpeed)
+                            time = min(.6, 900 / max(1, Vec3(target.physics.velocity).length()), (carLocation - huntLocation).length() / max(carSpeed, 1))
                             huntLocation = Vec3(target.physics.location) + time * Vec3(target.physics.velocity)
 
                         ballLocation = huntLocation
@@ -416,12 +416,12 @@ class Dribble(State):
             throttle = max(throttle, 1)
 
         ## set controller state
-        self.controllerState.steer = min(1, max(-1, steer))
-        self.controllerState.throttle = min(1, max(-1, throttle))
+        self.controller.steer = min(1, max(-1, steer))
+        self.controller.throttle = min(1, max(-1, throttle))
         if myCar.has_wheel_contact and throttle > 1.7 and carLocation.z < 100 and realBallLocation.z < 500:
-            self.controllerState.boost = carSpeed < 2300 - 991.667/120 * (1 if self.controllerState.boost else 10)
+            self.controller.boost = carSpeed < 2300 - 991.667/120 * (1 if self.controller.boost else 10)
         else:
-            self.controllerState.boost = False
+            self.controller.boost = False
 
 
             ## test if forward dodge is needed
@@ -461,7 +461,7 @@ class Dribble(State):
 
         # turnProportional = max(-1, min(1, steer_correction_radians * 4))
         # #action_display = f"turn {round(turn, 2)}" 
-        # self.controllerState.steer = turnProportional
+        # self.controller.steer = turnProportional
 
 
 
@@ -469,9 +469,9 @@ class Dribble(State):
         # speed = Vec3.length(myCar.physics.velocity)
         # targetSpeed = min(boostSpeed, Vec3.dist(ballLocation, carLocation) * 5 * math.cos(steer_correction_radians))
 
-        # self.controllerState.throttle = max(-1, min(1, (targetSpeed - speed) * 1000))
-        # self.controllerState.steer = turnProportional
-        # self.controllerState.boost = speed < targetSpeed if self.controllerState.boost or (abs(turnProportional) < 1 and targetSpeed > normalSpeed) else (abs(turnProportional) < 1 and speed < targetSpeed - 400)
+        # self.controller.throttle = max(-1, min(1, (targetSpeed - speed) * 1000))
+        # self.controller.steer = turnProportional
+        # self.controller.boost = speed < targetSpeed if self.controller.boost or (abs(turnProportional) < 1 and targetSpeed > normalSpeed) else (abs(turnProportional) < 1 and speed < targetSpeed - 400)
 
 
 
