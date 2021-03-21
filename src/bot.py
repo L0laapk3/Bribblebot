@@ -10,6 +10,8 @@ import util.const
 import sys
 from stateMachine import StateMachine
 
+IGNORE_LIST = ["Kamael"]
+
 
 class BribbleBot(BaseAgent):
 
