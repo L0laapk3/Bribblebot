@@ -11,4 +11,8 @@
         "${workspaceFolder}/src/rlutilities",
     ],
     "python.linting.enabled": true,
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/src",
+        "${workspaceFolder}/src/rlutilities"
+    ],
 }
