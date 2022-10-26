@@ -10,6 +10,8 @@ import util.const
 from rlutilities.linear_algebra import euler_to_rotation, dot, transpose, look_at, vec2, vec3, norm, normalize, angle_between, orthogonalize
 from rlutilities.simulation import Ball, Field, Game, Car
 from rlutilities.mechanics import ReorientML
+from tgdsmells import TGDSMELLSHandler
+
 
 
 import sys
@@ -49,6 +51,8 @@ class BribbleBot(BaseAgent):
 		self.jumpReleased = True
 		self.lastDodgeTick = -math.inf
 		self.lastController = SimpleControllerState()
+
+		self.tgdsmells_handler = TGDSMELLSHandler(self)
 
 
 	def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
