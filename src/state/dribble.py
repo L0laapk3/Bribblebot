@@ -161,10 +161,13 @@ class Dribble(Recover):
 						ballToCarDistance = ballToCarAbsoluteLocation.length()
 
 
+						self.agent.send_demo_action(target.index)
+
 					break
 
-
-
+		if beAnnoying == False:
+			self.agent.send_ball_action()
+					
 
 
 
